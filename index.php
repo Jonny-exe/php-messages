@@ -1,5 +1,5 @@
 <?php
-
+require_once("vendor/autoload.php");
 session_start();
 
 $dbhost = 'localhost';
@@ -9,12 +9,29 @@ $dbname = 'php_test';
 $conn = new PDO('mysql:host=' . $dbhost . ';dbname=' . $dbname, $dbuser, $dbpass);
 // $conn->query("insert into users (name) values ('hi')");
 
+// if ($_REQUEST['create_keºy_pair']) {
+	$keypair = sodium_crypto_box_keypair();
+	$publicKey = sodium_crypto_box_publickey($keypair);
+	// ...
+	$encrypted = sodium_crypto_box_seal(
+		"Hi",
+		$publicKey
+	);
+	// ...
+	$decrypted = sodium_crypto_box_seal_open(
+		$encrypted,
+		$keypair
+	);
+	echo "Decrypted: " . $decrypted;
+	
+// }
+
 if ($conn->connect_error) {
 	die("Connection failed");
 }
 
-if ($_REQUEST['username']) {
-	$_SESSION['username'] = $_REQUEST['username'];
+if ($_REQUEST['name']) {
+	$_SESSION['name'] = $_REQUEST['name'];
 }
 
 if ($_REQUEST['new_friend']) {
@@ -39,12 +56,6 @@ function insertFriend($conn, $uid, $friend_name)
 	$conn->query($q);
 }
 
-if ($_SESSION['see']) {
-	$sql = 'SELECT * FROM users ORDER BY id desc';
-	foreach ($conn->query($sql) as $row) {
-		print $row;
-	}
-}
 
 ?>
 <link hred="css/style.css.php" rel="stylesheet" type="text/css">
@@ -71,7 +82,7 @@ function insert_message($conn, $text, $sender, $receiver)
 }
 if ($_REQUEST['text']) {
 	$text = $_REQUEST['text'];
-	$name = $_SESSION['username'];
+	$name = $_SESSION['name'];
 	$friend = $_SESSION['friend'];
 	insert_message($conn, $text, $name, $friend);
 	$new_url = strip_param_from_url("text");
@@ -104,7 +115,7 @@ function getUID($conn, $name)
 
 if ($_SESSION['new_friend']) {
 	$friend_name = $_SESSION['new_friend'];
-	$name = $_SESSION['username'];
+	$name = $_SESSION['name'];
 	$uid = getUID($conn, $name);
 	insertFriend($conn, $uid, $friend_name);
 }
@@ -120,6 +131,7 @@ function get_messages($conn, $friend, $name)
 }
 
 if ($_SESSION['friend']) {
+	$name = $_SESSION['name'];
 	$friend = $_SESSION['friend'];
 	print "<h2>User: " . $name . "</h2>";
 	$uid = getUID($conn, $name);
@@ -157,11 +169,12 @@ function get_friends($conn, $uid)
 }
 
 print "<h2>Friend: " . $friend . "</h2>";
-if ($_SESSION['username']) {
-	$name = $_SESSION['username'];
+if ($_SESSION['name']) {
+	$name = $_SESSION['name'];
 	insertUsername($conn, $name);
 	$uid = getUID($conn, $name);
 	$friends = get_friends($conn, $uid);
+	print $friends;
 	print "<table class='table' border=1>
     <thead><td colspan=2> Your friends </td></thead>";
 	foreach ($friends as $friend) {
@@ -183,7 +196,7 @@ if ($_SESSION['username']) {
 	</div>
 	<div class="input-group mb-3">
 		<button class="btn btn-primary" type="submit" id="button-addon1">Login</button>
-		<input type="text" name="username" class="form-control" placeholder="" aria-label="Example text with button addon" aria-describedby="button-addon1">
+		<input type="text" name="name" class="form-control" placeholder="" aria-label="Example text with button addon" aria-describedby="button-addon1">
 	</div>
 </form>
 <style>

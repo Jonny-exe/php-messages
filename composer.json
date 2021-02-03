@@ -1,5 +1,5 @@
 {
     "require": {
-        "singpolyma/openpgp-php": "^0.4.0"
+        "paragonie/sodium_compat": "^1.14"
     }
 }
