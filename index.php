@@ -9,29 +9,23 @@ $dbname = 'php_test';
 $conn = new PDO('mysql:host=' . $dbhost . ';dbname=' . $dbname, $dbuser, $dbpass);
 // $conn->query("insert into users (name) values ('hi')");
 
-// if ($_REQUEST['create_keºy_pair']) {
-	$keypair = sodium_crypto_box_keypair();
-	$publicKey = sodium_crypto_box_publickey($keypair);
-	// ...
-	$encrypted = sodium_crypto_box_seal(
-		"Hi",
-		$publicKey
-	);
-	// ...
-	$decrypted = sodium_crypto_box_seal_open(
-		$encrypted,
-		$keypair
-	);
-	echo "Decrypted: " . $decrypted;
-	
-// }
-
-if ($conn->connect_error) {
-	die("Connection failed");
-}
 
 if ($_REQUEST['name']) {
 	$_SESSION['name'] = $_REQUEST['name'];
+}
+
+
+if ($_SESSION['name']) {
+	$name = $_SESSION['name'];
+}
+
+if ($_SESSION['keypair_' . $name]) {
+	$keypair = $_SESSION['keypair_' . $name];
+	setcookie("keypair_" . $name, $keypair, time() + (86400 * 30));
+	$_SESSION['keypair_' . $name] = null;
+}
+if ($conn->connect_error) {
+	die("Connection failed");
 }
 
 if ($_REQUEST['new_friend']) {
@@ -42,11 +36,44 @@ if ($_REQUEST['friend']) {
 	$_SESSION['friend'] = $_REQUEST['friend'];
 }
 
+if ($_COOKIE['keypair_' . $name]) {
+	$keypair = $_COOKIE['keypair_' . $name];
+}
 
 
-function insertUsername($conn, $name)
+
+function create_key_pair($name)
 {
-	$q = "insert into users (name) values ('$name')";
+	$public_key = false;
+	if (!isset($_COOKIE['keypair_' . $name])) {
+		$keypair = sodium_crypto_box_keypair();
+		$_SESSION['keypair_' . $name] = $keypair;
+		print "Isset" . isset($_COOKIE['keypair_' . $name]);
+		$public_key = sodium_crypto_box_publickey($keypair);
+	}
+
+	return $public_key;
+}
+function encrypt_message($message, $public_key)
+{
+	$encrypted_message = sodium_crypto_box_seal($message, $public_key);
+	return $encrypted_message;
+}
+
+function decrypt_message($encrypted_message, $keypair)
+{
+	$decrypted = sodium_crypto_box_seal_open(
+		$encrypted_message,
+		$keypair
+	);
+	return $decrypted;
+}
+
+
+
+function insert_user($conn, $name, $public_key)
+{
+	$q = "insert into users (name, public_key) values ('$name', '$public_key')";
 	$conn->query($q);
 }
 
@@ -77,14 +104,27 @@ function insertFriend($conn, $uid, $friend_name)
 
 function insert_message($conn, $text, $sender, $receiver)
 {
-	$p = "insert into messages (text, sender, receiver) values ('$text', '$sender', '$receiver')";
-	$conn->query($p);
+	$q = "insert into messages (text, sender, receiver) values ('$text', '$sender', '$receiver')";
+	$conn->query($q);
+}
+
+function get_public_key($name, $conn, $keypair)
+{
+	$result = $conn->query("SELECT public_key from users where name = '$name'");
+	$result = $result->fetch()[0];
+	print "Result: " . $result;
+	$public_key = sodium_crypto_box_publickey($keypair);
+	print "Public: " . $public_key;
+	return $public_key;
 }
 if ($_REQUEST['text']) {
 	$text = $_REQUEST['text'];
 	$name = $_SESSION['name'];
 	$friend = $_SESSION['friend'];
-	insert_message($conn, $text, $name, $friend);
+	$public_key = get_public_key($name, $conn, $keypair);
+	print $public_key;
+	$encrypted_text = encrypt_message($text, $public_key);
+	insert_message($conn, $encrypted_text, $name, $friend);
 	$new_url = strip_param_from_url("text");
 	set_url($new_url);
 }
@@ -139,15 +179,16 @@ if ($_SESSION['friend']) {
 
 	print "<table class='table' border=1>
 	<thead><td colspan=2> Messages </td></thead>";
-	render_messages($messages, $name);
+	render_messages($messages, $name, $keypair);
 	print "</table>";
 }
 
-function render_messages($messages, $name)
+function render_messages($messages, $name, $keypair)
 {
 	if ($messages != null)
 		foreach ($messages as $message) {
 			$text = $message["text"];
+			$text = decrypt_message($text, $keypair);
 			$sender = $message["sender"];
 			if ($sender == $name) {
 				$td = "<tr><td>$text</td><td></td></tr>";
@@ -164,6 +205,9 @@ function render_messages($messages, $name)
 function get_friends($conn, $uid)
 {
 	$result = $conn->query("select name, uid from friends where uid=$uid");
+	if (!$result) {
+		return [];
+	}
 	$result = $result->fetchAll();
 	return $result;
 }
@@ -171,20 +215,26 @@ function get_friends($conn, $uid)
 print "<h2>Friend: " . $friend . "</h2>";
 if ($_SESSION['name']) {
 	$name = $_SESSION['name'];
-	insertUsername($conn, $name);
+	$public_key = create_key_pair($name);
+	if ($public_key == false) {
+		insert_user($conn, $name, $public_key);
+	}
 	$uid = getUID($conn, $name);
 	$friends = get_friends($conn, $uid);
-	print $friends;
-	print "<table class='table' border=1>
+	if ($friends) {
+
+		print $friends;
+		print "<table class='table' border=1>
     <thead><td colspan=2> Your friends </td></thead>";
-	foreach ($friends as $friend) {
-		$id = $friend['uid'];
-		$friendname = $friend['name'];
-		print <<<EOF
-    <tr><td>$id</td><td><a href="index.php?username=$name&new_friend=$friend_name&friend=$friendname"> $friendname </a></td></tr>
+		foreach ($friends as $friend) {
+			$id = $friend['uid'];
+			$friendname = $friend['name'];
+			print <<<EOF
+    <tr><td>$id</td><td><a href="index.php?name=$name&new_friend=$friend_name&friend=$friendname"> $friendname </a></td></tr>
     EOF;
+		}
+		print "</table>";
 	}
-	print "</table>";
 }
 
 
