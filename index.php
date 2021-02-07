@@ -8,6 +8,19 @@ $dbpass = 'password';
 $dbname = 'php_test';
 
 $conn = new PDO('mysql:host=' . $dbhost . ';dbname=' . $dbname, $dbuser, $dbpass);
+function setup_db($conn)
+{
+	$q = "CREATE table  if not exists users (uid int(11) auto_increment, name varchar(30), public_key longtext, primary key (uid), unique key (name)) ";
+	$conn->query($q);
+
+	$q = "CREATE table  if not exists messages (sender_text longtext, receiver_text longtext, receiver varchar(30),sender varchar(30)  ";
+	$conn->query($q);
+	
+	$q = "CREATE table  if not exists friends (name varchar(30), uid int(11))";
+	$conn->query($q);
+}
+
+setup_db($conn);
 
 $name = $_SERVER['REMOTE_ADDR'];
 // $name = "test2";
