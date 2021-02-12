@@ -2,26 +2,18 @@
 require_once("vendor/autoload.php");
 session_start();
 
-$dbhost = '127.0.0.1';
-$dbuser = 'docker';
-$dbpass = 'docker';
-// $dbname = 'php_test';
+$dbhost = "database";
+$port = "3306";
+$dbuser = "root";
+$dbpass = "tiger";
 
-// $keypair = sodium_crypto_box_keypair();
-// // $public_key = sodium_crypto_box_publickey_from_secretkey($keypair);
-// $public_key = sodium_crypto_box_publickey($keypair);
-// print "Default: " . $public_key;
-// $public_key = sodium_bin2base64($public_key, 1);
-// print "Base: " . $public_key;
-// $public_key = sodium_base642bin($public_key, 1);
-// print "Bin: " . $public_key;
-// $encrypted_message = sodium_crypto_box_seal("hello", $public_key);
-// $decrypted_message = sodium_crypto_box_seal_open($encrypted_message, $keypair);
-// print "Decrypted: " . $decrypted_message . " ";
-
-$conn = new PDO("mysql:host=$dbhost", $dbuser, $dbpass);
+$conn = new PDO("mysql:host=$dbhost;port=$port", $dbuser, $dbpass);
+// print "WORKS";
 function setup_db($conn)
 {
+	// $q = "DROP database php_test";
+	// $conn->query($q);
+
 	// $q = "CREATE database if not exists php_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci";
 	$q = "CREATE database if not exists php_test";
 	$conn->query($q);
@@ -30,6 +22,7 @@ function setup_db($conn)
 	$conn->query($q);
 
 	$q = "set names 'utf8'";
+
 	$conn->query($q);
 
 	$q = "CREATE table if not exists users (uid int(11) auto_increment, name varchar(30), public_key longtext, primary key (uid), unique key (name))";
@@ -50,19 +43,19 @@ $name = $_SERVER['REMOTE_ADDR'];
 // $name = "test2";
 $name = str_replace(".", "_", $name);
 
-if ($_SESSION['name']) {
+// if ($conn->connect_error) {
+// 	die("Connection failed");
+// }
+
+if (isset($_SESSION['name'])) {
 	$name = $_SESSION['name'];
 }
 
-if ($conn->connect_error) {
-	die("Connection failed");
-}
-
-if ($_REQUEST['friend']) {
+if (isset($_REQUEST['friend'])) {
 	$_SESSION['friend'] = $_REQUEST['friend'];
 }
 
-if ($_SESSION['friend']) {
+if (isset($_SESSION['friend'])) {
 	$friend = $_SESSION['friend'];
 }
 
@@ -128,7 +121,9 @@ function create_keypair_if_not_exist($conn, $does_user_exist, $name)
 		insert_user($conn, $name, $public_key);
 		return $keypair;
 	} else {
-		return $keypair = $_COOKIE['keypair_' . $name];
+		$keypair = $_COOKIE['keypair_' . $name];
+		print "Keypair : " . $keypair;
+		return $keypair;
 	}
 }
 $keypair = create_keypair_if_not_exist($conn, $does_user_exist, $name);
@@ -168,7 +163,7 @@ function get_public_key($name, $conn)
 	$result = sodium_base642bin($result, 1);
 	return $result;
 }
-if ($_REQUEST['text']) {
+if (isset($_REQUEST['text'])) {
 	$text = $_REQUEST['text'];
 	$friend = $_SESSION['friend'];
 	$public_key_user = get_public_key($name, $conn);
@@ -217,12 +212,14 @@ function getUID($conn, $name)
 	return $uid[0];
 }
 
-if ($_REQUEST['new_friend']) {
+if (isset($_REQUEST['new_friend'])) {
+	print "Friend";
 	$friend_name = $_REQUEST['new_friend'];
 	$uid = getUID($conn, $name);
 	insertFriend($conn, $uid, $friend_name);
 	$new_url = strip_param_from_url("new_friend");
 	set_url($new_url);
+	print_r(get_friends($conn, $uid));
 }
 
 function get_messages($conn, $friend, $name)
@@ -233,9 +230,9 @@ function get_messages($conn, $friend, $name)
 	return $messages;
 }
 
-if ($_SESSION['friend']) {
+print "<h2>User: " . $name . "</h2>";
+if (isset($_SESSION['friend'])) {
 	$friend = $_SESSION['friend'];
-	print "<h2>User: " . $name . "</h2>";
 	$uid = getUID($conn, $name);
 	$messages = get_messages($conn, $friend, $name);
 
@@ -282,14 +279,17 @@ function get_friends($conn, $uid)
 	return $result;
 }
 
-function print_friends($conn, $friend, $name, $friend_name)
-{
+if (isset($friend)) {
 	print "<h2>Friend: " . $friend . "</h2>";
+}
+
+function print_friends($conn, $name)
+{
 	$uid = getUID($conn, $name);
 	$friends = get_friends($conn, $uid);
-	if ($friends) {
-		print "<table class='table' border=1>
+	print "<table class='table' border=1>
     <thead><td colspan=2> Your friends </td></thead>";
+	if ($friends) {
 		foreach ($friends as $friend) {
 			$vars = array(
 				'$id' => $friend['uid'],
@@ -299,10 +299,12 @@ function print_friends($conn, $friend, $name, $friend_name)
 			$line = strtr($line, $vars);
 			print $line;
 		}
-		print "</table>";
 	}
+	print "</table>";
 }
-print_friends($conn, $friend, $name, $friend_name);
+// if (isset($friend)) {
+print_friends($conn, $name);
+// }
 
 ?>
 
