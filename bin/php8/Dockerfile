@@ -47,6 +47,13 @@ RUN apt-get update && \
     apt-get -y --no-install-recommends install --fix-missing libmagickwand-dev && \
     rm -rf /var/lib/apt/lists/*
 
+# This is mine
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    net-tools \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
 # Workarround until imagick is available in pecl with php8 support
 # Imagick Commit to install
 # https://github.com/Imagick/imagick
