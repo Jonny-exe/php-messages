@@ -4,7 +4,7 @@ session_start();
 
 $dbhost = "localhost";
 $port = "3306";
-$dbuser = "root";
+$dbuser = "php-test";
 $dbpass = "password";
 
 $conn = new PDO("mysql:host=$dbhost;port=$port", $dbuser, $dbpass);
@@ -37,10 +37,6 @@ setup_db($conn);
 $name = $_SERVER['REMOTE_ADDR'];
 // $name = "test2";
 $name = str_replace(".", "_", $name);
-
-// if ($conn->connect_error) {
-// 	die("Connection failed");
-// }
 
 if (isset($_SESSION['name'])) {
 	$name = $_SESSION['name'];
@@ -120,7 +116,6 @@ function create_keypair_if_not_exist($conn, $does_user_exist, $name)
 	}
 }
 $keypair = create_keypair_if_not_exist($conn, $does_user_exist, $name);
-print $name;
 
 
 ?>
