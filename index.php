@@ -8,13 +8,8 @@ $dbuser = "root";
 $dbpass = "password";
 
 $conn = new PDO("mysql:host=$dbhost;port=$port", $dbuser, $dbpass);
-// print "WORKS";
 function setup_db($conn)
 {
-	// $q = "DROP database php_test";
-	// $conn->query($q);
-
-	// $q = "CREATE database if not exists php_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci";
 	$q = "CREATE database if not exists php_test";
 	$conn->query($q);
 
@@ -80,7 +75,6 @@ function create_keypair()
 }
 function encrypt_message($message, $public_key)
 {
-	print "Public key: " . $public_key;
 	$encrypted_message = sodium_crypto_box_seal($message, $public_key);
 	return $encrypted_message;
 }
@@ -122,7 +116,6 @@ function create_keypair_if_not_exist($conn, $does_user_exist, $name)
 		return $keypair;
 	} else {
 		$keypair = $_COOKIE['keypair_' . $name];
-		print "Keypair : " . $keypair;
 		return $keypair;
 	}
 }
@@ -167,23 +160,12 @@ if (isset($_REQUEST['text'])) {
 	$text = $_REQUEST['text'];
 	$friend = $_SESSION['friend'];
 	$public_key_user = get_public_key($name, $conn);
-	print "\nUser key: " . $public_key_user;
 	$public_key_friend = get_public_key($friend, $conn);
-	print "\nUser key: " . $public_key_user;
-	if ($public_key_user[0] == "?") {
-		print "True";
-	} else {
-		print "False";
-	}
-	$public_key_user = sodium_crypto_box_publickey($keypair);
-	print "\nUser key: " . $public_key_user;
-	print "\tHELLo";
 
 	$encrypted_text_user = encrypt_message($text, $public_key_user);
 	$encrypted_text_friend = encrypt_message($text, $public_key_friend);
 
 	insert_message($conn, $encrypted_text_user, $encrypted_text_friend, $name, $friend);
-	print "inserted messages";
 	$new_url = strip_param_from_url("text");
 	set_url($new_url);
 }
@@ -213,13 +195,11 @@ function getUID($conn, $name)
 }
 
 if (isset($_REQUEST['new_friend'])) {
-	print "Friend";
 	$friend_name = $_REQUEST['new_friend'];
 	$uid = getUID($conn, $name);
 	insertFriend($conn, $uid, $friend_name);
 	$new_url = strip_param_from_url("new_friend");
 	set_url($new_url);
-	print_r(get_friends($conn, $uid));
 }
 
 function get_messages($conn, $friend, $name)
@@ -248,7 +228,6 @@ function render_messages($messages, $name, $keypair)
 		foreach ($messages as $message) {
 			$sender = $message["sender"];
 			if ($sender == $name) {
-				print "sender";
 				$text = $message["sender_text"];
 			} else {
 				$text = $message["receiver_text"];
