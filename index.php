@@ -2,10 +2,10 @@
 require_once("vendor/autoload.php");
 session_start();
 
-$dbhost = "database";
+$dbhost = "localhost";
 $port = "3306";
 $dbuser = "root";
-$dbpass = "tiger";
+$dbpass = "password";
 
 $conn = new PDO("mysql:host=$dbhost;port=$port", $dbuser, $dbpass);
 // print "WORKS";
