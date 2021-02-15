@@ -36,7 +36,7 @@ function setup_db($conn)
 setup_db($conn);
 
 $name = $_SERVER['REMOTE_ADDR'];
-$name = "test3";
+// $name = "test3";
 $name = str_replace(".", "_", $name);
 
 if (isset($_REQUEST['friend'])) {
