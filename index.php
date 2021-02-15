@@ -36,7 +36,7 @@ function setup_db($conn)
 setup_db($conn);
 
 $name = $_SERVER['REMOTE_ADDR'];
-// $name = "test2";
+$name = "test3";
 $name = str_replace(".", "_", $name);
 
 if (isset($_REQUEST['friend'])) {
@@ -44,8 +44,10 @@ if (isset($_REQUEST['friend'])) {
 	$friend = $_REQUEST['friend'];
 }
 
-use ReallySimpleJWT\Token;
+$does_user_exist = does_user_exist($conn, $name);
+$keypair = create_keypair_if_not_exist($conn, $does_user_exist, $name);
 
+use ReallySimpleJWT\Token;
 try {
 	if (!isset($_SESSION['jwt'])) {
 		throw new Exception('New Token');
@@ -83,7 +85,6 @@ function create_jwt_token($conn, $name)
 
 	$secret = file_get_contents("secret.txt");
 
-	print "NEW";
 	$token = Token::customPayload($payload, $secret);
 
 	$_SESSION['jwt'] = $token;
@@ -201,9 +202,6 @@ function public_key_into_bin($public_key)
 }
 
 
-
-$does_user_exist = does_user_exist($conn, $name);
-$keypair = create_keypair_if_not_exist($conn, $does_user_exist, $name);
 
 
 ?>
