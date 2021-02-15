@@ -6,7 +6,6 @@ $dbhost = "localhost";
 $port = "3306";
 $dbuser = "php-test";
 $dbpass = "password";
-//TODO: manage exceptions
 
 $conn = new PDO("mysql:host=$dbhost;port=$port", $dbuser, $dbpass);
 function setup_db($conn)
@@ -28,8 +27,6 @@ function setup_db($conn)
 	$conn->query($q);
 
 	$q = "CREATE table if not exists friends (name varchar(30), uid int(11))";
-	$conn->query($q);
-
 	$conn->query($q);
 }
 
@@ -136,6 +133,15 @@ function does_friend_exist($conn, $friend_name)
 	}
 }
 
+
+function get_messages($conn, $friend, $name)
+{
+	$q = "select sender_text, receiver_text, sender from messages where (sender='$name' and receiver='$friend') or (sender='$friend' and receiver='$name')";
+	$messages = $conn->query($q);
+	$messages = $messages->fetchAll();
+	return $messages;
+}
+
 function insert_user($conn, $name, $public_key)
 {
 	$q = "insert into users (name, public_key) values ('$name', '$public_key')";
@@ -156,7 +162,7 @@ function insert_message($conn, $sender_text, $receiver_text, $sender, $receiver)
 	$conn->query($q);
 }
 
-function get_public_key($name, $conn, $bin)
+function get_public_key($name, $conn, $bin = true)
 {
 	$result = $conn->query("SELECT public_key from users where name = '$name'");
 	$result = $result->fetch()[0];
@@ -247,19 +253,24 @@ function public_key_into_bin($public_key)
 
 if (isset($_REQUEST['text'])) {
 	$text = $_REQUEST['text'];
-	$friend = $_SESSION['friend'];
+	send_text($conn, $text, $friend, $name, $payload);
+}
+
+function send_text($conn, $text, $friend, $name, $payload)
+{
 	$public_key_user = public_key_into_bin($payload["public_key"]);
-	$public_key_friend = get_public_key($friend, $conn, true);
+	$public_key_friend = get_public_key($friend, $conn);
 
 	$encrypted_text_user = encrypt_message($text, $public_key_user);
 	$encrypted_text_friend = encrypt_message($text, $public_key_friend);
-	if ($encrypted_text_user != false AND $encrypted_text_friend != false) {
+	if ($encrypted_text_user != false and $encrypted_text_friend != false) {
 		insert_message($conn, $encrypted_text_user, $encrypted_text_friend, $name, $friend);
 	}
 
 	$new_url = strip_param_from_url("text");
 	set_url($new_url);
 }
+
 
 function strip_param_from_url($param)
 {
@@ -285,7 +296,7 @@ function add_new_friend($conn, $name)
 
 	$is_friend_added = is_friend_already_added($conn, $uid, $friend_name);
 	$does_friend_exist = does_friend_exist($conn, $friend_name);
-	if ($is_friend_added == false AND $does_friend_exist == true) {
+	if ($is_friend_added == false and $does_friend_exist == true) {
 		insert_friend($conn, $uid, $friend_name);
 	} else {
 		print '<div class="alert alert-danger" role="alert"> Friend already added or friend doesn\'t exist</div>';
@@ -297,14 +308,6 @@ function add_new_friend($conn, $name)
 
 if (isset($_REQUEST['new_friend'])) {
 	add_new_friend($conn, $name);
-}
-
-function get_messages($conn, $friend, $name)
-{
-	$q = "select sender_text, receiver_text, sender from messages where (sender='$name' and receiver='$friend') or (sender='$friend' and receiver='$name')";
-	$messages = $conn->query($q);
-	$messages = $messages->fetchAll();
-	return $messages;
 }
 
 print "<h2>User: " . $name . "</h2>";
