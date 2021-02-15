@@ -48,6 +48,7 @@ $does_user_exist = does_user_exist($conn, $name);
 $keypair = create_keypair_if_not_exist($conn, $does_user_exist, $name);
 
 use ReallySimpleJWT\Token;
+
 try {
 	if (!isset($_SESSION['jwt'])) {
 		throw new Exception('New Token');
@@ -58,7 +59,7 @@ try {
 	$result = Token::validate($token, $secret);
 
 	if ($result != 1) {
-		print '<div class="alert alert-danger" role="alert">Something went wrong</div>';
+		print_alert();
 		throw new Exception('New Token');
 	}
 
@@ -70,6 +71,11 @@ try {
 	}
 } catch (Exception $e) {
 	$payload = create_jwt_token($conn, $name);
+}
+
+function print_alert()
+{
+	print '<div class="alert alert-danger" role="alert">Something went wrong</div>';
 }
 
 function create_jwt_token($conn, $name)
@@ -109,6 +115,18 @@ function does_user_exist($conn, $name)
 function is_friend_already_added($conn, $uid, $friend_name)
 {
 	$q = "SELECT * from friends where name = '$friend_name' and uid = $uid";
+	$result = $conn->query($q);
+	$result = $result->fetchAll();
+	if (count($result) == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
+function does_friend_exist($conn, $friend_name)
+{
+	$q = "SELECT * from users where name = '$friend_name'";
 	$result = $conn->query($q);
 	$result = $result->fetchAll();
 	if (count($result) == 0) {
@@ -166,7 +184,12 @@ function create_keypair()
 }
 function encrypt_message($message, $public_key)
 {
-	$encrypted_message = sodium_crypto_box_seal($message, $public_key);
+	try {
+		$encrypted_message = sodium_crypto_box_seal($message, $public_key);
+	} catch (Exception $e) {
+		print_alert();
+		$encrypted_message = false;
+	}
 	return $encrypted_message;
 }
 
@@ -230,8 +253,10 @@ if (isset($_REQUEST['text'])) {
 
 	$encrypted_text_user = encrypt_message($text, $public_key_user);
 	$encrypted_text_friend = encrypt_message($text, $public_key_friend);
+	if ($encrypted_text_user != false AND $encrypted_text_friend != false) {
+		insert_message($conn, $encrypted_text_user, $encrypted_text_friend, $name, $friend);
+	}
 
-	insert_message($conn, $encrypted_text_user, $encrypted_text_friend, $name, $friend);
 	$new_url = strip_param_from_url("text");
 	set_url($new_url);
 }
@@ -259,10 +284,11 @@ function add_new_friend($conn, $name)
 	$uid = getUID($conn, $name);
 
 	$is_friend_added = is_friend_already_added($conn, $uid, $friend_name);
-	if ($is_friend_added == false) {
+	$does_friend_exist = does_friend_exist($conn, $friend_name);
+	if ($is_friend_added == false AND $does_friend_exist == true) {
 		insert_friend($conn, $uid, $friend_name);
 	} else {
-		print '<div class="alert alert-danger" role="alert"> Friend already added </div>';
+		print '<div class="alert alert-danger" role="alert"> Friend already added or friend doesn\'t exist</div>';
 	}
 
 	$new_url = strip_param_from_url("new_friend");
