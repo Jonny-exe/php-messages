@@ -1,5 +1,6 @@
 {
     "require": {
-        "paragonie/sodium_compat": "^1.14"
+        "paragonie/sodium_compat": "^1.14",
+        "rbdwllr/reallysimplejwt": "^3.1"
     }
 }

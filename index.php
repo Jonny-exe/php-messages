@@ -6,6 +6,7 @@ $dbhost = "localhost";
 $port = "3306";
 $dbuser = "php-test";
 $dbpass = "password";
+//TODO: manage exceptions
 
 $conn = new PDO("mysql:host=$dbhost;port=$port", $dbuser, $dbpass);
 function setup_db($conn)
@@ -38,19 +39,60 @@ $name = $_SERVER['REMOTE_ADDR'];
 // $name = "test2";
 $name = str_replace(".", "_", $name);
 
-if (isset($_SESSION['name'])) {
-	$name = $_SESSION['name'];
-}
-
 if (isset($_REQUEST['friend'])) {
 	$_SESSION['friend'] = $_REQUEST['friend'];
+	$friend = $_REQUEST['friend'];
 }
 
-if (isset($_SESSION['friend'])) {
-	$friend = $_SESSION['friend'];
+use ReallySimpleJWT\Token;
+
+try {
+	if (!isset($_SESSION['jwt'])) {
+		throw new Exception('New Token');
+	}
+	$secret = file_get_contents("secret.txt");
+	$token  = $_SESSION['jwt'];
+
+	$result = Token::validate($token, $secret);
+
+	if ($result != 1) {
+		print '<div class="alert alert-danger" role="alert">Something went wrong</div>';
+		throw new Exception('New Token');
+	}
+
+	$header = Token::getHeader($token, $secret);
+	$payload = Token::getPayload($token, $secret);
+
+	if ($payload['user'] != $name) {
+		throw new Exception('New Token');
+	}
+} catch (Exception $e) {
+	$payload = create_jwt_token($conn, $name);
+}
+
+function create_jwt_token($conn, $name)
+{
+	unset($_SESSION['jwt']);
+	$public_key_user = get_public_key($name, $conn, false);
+	$payload = [
+		'iat' => time(),
+		'exp' => time() + 3600,
+		'user' => $name,
+		'public_key' => $public_key_user,
+	];
+
+	$secret = file_get_contents("secret.txt");
+
+	print "NEW";
+	$token = Token::customPayload($payload, $secret);
+
+	$_SESSION['jwt'] = $token;
+
+	return $payload;
 }
 
 
+// Database functions 
 function does_user_exist($conn, $name)
 {
 	$q = "SELECT * from users where name = '$name'";
@@ -63,7 +105,59 @@ function does_user_exist($conn, $name)
 	}
 }
 
+function is_friend_already_added($conn, $uid, $friend_name)
+{
+	$q = "SELECT * from friends where name = '$friend_name' and uid = $uid";
+	$result = $conn->query($q);
+	$result = $result->fetchAll();
+	if (count($result) == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
 
+function insert_user($conn, $name, $public_key)
+{
+	$q = "insert into users (name, public_key) values ('$name', '$public_key')";
+	$conn->query($q);
+}
+
+function insert_friend($conn, $uid, $friend_name)
+{
+	$q = "insert into friends (name, uid) values ('$friend_name', $uid)";
+	$conn->query($q);
+}
+
+function insert_message($conn, $sender_text, $receiver_text, $sender, $receiver)
+{
+	$sender_text = sodium_bin2base64($sender_text, 1);
+	$receiver_text = sodium_bin2base64($receiver_text, 1);
+	$q = "insert into messages (sender_text, receiver_text, sender, receiver) values ('$sender_text','$receiver_text', '$sender', '$receiver')";
+	$conn->query($q);
+}
+
+function get_public_key($name, $conn, $bin)
+{
+	$result = $conn->query("SELECT public_key from users where name = '$name'");
+	$result = $result->fetch()[0];
+	if ($bin == true) {
+		$result = sodium_base642bin($result, 1);
+	}
+	return $result;
+}
+
+function getUID($conn, $name)
+{
+	$uid = $conn->query("select uid from users where name='$name' order by uid desc");
+	$uid = $uid->fetch();
+	return $uid[0];
+}
+
+
+
+
+// Sodium functions
 function create_keypair()
 {
 	$keypair = sodium_crypto_box_keypair();
@@ -84,22 +178,6 @@ function decrypt_message($encrypted_message, $keypair)
 	return $decrypted;
 }
 
-
-
-function insert_user($conn, $name, $public_key)
-{
-	$q = "insert into users (name, public_key) values ('$name', '$public_key')";
-	$conn->query($q);
-}
-
-function insertFriend($conn, $uid, $friend_name)
-{
-	$q = "insert into friends (name, uid) values ('$friend_name', $uid)";
-	$conn->query($q);
-}
-
-
-$does_user_exist = does_user_exist($conn, $name);
 function create_keypair_if_not_exist($conn, $does_user_exist, $name)
 {
 	if (!$does_user_exist) {
@@ -115,6 +193,16 @@ function create_keypair_if_not_exist($conn, $does_user_exist, $name)
 		return $keypair;
 	}
 }
+
+function public_key_into_bin($public_key)
+{
+	$public_key = sodium_base642bin($public_key, 1);
+	return $public_key;
+}
+
+
+
+$does_user_exist = does_user_exist($conn, $name);
 $keypair = create_keypair_if_not_exist($conn, $does_user_exist, $name);
 
 
@@ -136,26 +224,11 @@ $keypair = create_keypair_if_not_exist($conn, $does_user_exist, $name);
 
 <?php
 
-function insert_message($conn, $sender_text, $receiver_text, $sender, $receiver)
-{
-	$sender_text = sodium_bin2base64($sender_text, 1);
-	$receiver_text = sodium_bin2base64($receiver_text, 1);
-	$q = "insert into messages (sender_text, receiver_text, sender, receiver) values ('$sender_text','$receiver_text', '$sender', '$receiver')";
-	$conn->query($q);
-}
-
-function get_public_key($name, $conn)
-{
-	$result = $conn->query("SELECT public_key from users where name = '$name'");
-	$result = $result->fetch()[0];
-	$result = sodium_base642bin($result, 1);
-	return $result;
-}
 if (isset($_REQUEST['text'])) {
 	$text = $_REQUEST['text'];
 	$friend = $_SESSION['friend'];
-	$public_key_user = get_public_key($name, $conn);
-	$public_key_friend = get_public_key($friend, $conn);
+	$public_key_user = public_key_into_bin($payload["public_key"]);
+	$public_key_friend = get_public_key($friend, $conn, true);
 
 	$encrypted_text_user = encrypt_message($text, $public_key_user);
 	$encrypted_text_friend = encrypt_message($text, $public_key_friend);
@@ -182,19 +255,24 @@ function set_url($url)
 	echo ("<script>history.replaceState({},'','$url');</script>");
 }
 
-function getUID($conn, $name)
+function add_new_friend($conn, $name)
 {
-	$uid = $conn->query("select uid from users where name='$name' order by uid desc");
-	$uid = $uid->fetch();
-	return $uid[0];
+	$friend_name = $_REQUEST['new_friend'];
+	$uid = getUID($conn, $name);
+
+	$is_friend_added = is_friend_already_added($conn, $uid, $friend_name);
+	if ($is_friend_added == false) {
+		insert_friend($conn, $uid, $friend_name);
+	} else {
+		print '<div class="alert alert-danger" role="alert"> Friend already added </div>';
+	}
+
+	$new_url = strip_param_from_url("new_friend");
+	set_url($new_url);
 }
 
 if (isset($_REQUEST['new_friend'])) {
-	$friend_name = $_REQUEST['new_friend'];
-	$uid = getUID($conn, $name);
-	insertFriend($conn, $uid, $friend_name);
-	$new_url = strip_param_from_url("new_friend");
-	set_url($new_url);
+	add_new_friend($conn, $name);
 }
 
 function get_messages($conn, $friend, $name)
@@ -276,9 +354,7 @@ function print_friends($conn, $name)
 	}
 	print "</table>";
 }
-// if (isset($friend)) {
 print_friends($conn, $name);
-// }
 
 ?>
 
