@@ -1,15 +1,19 @@
 <?php
 require_once("vendor/autoload.php");
+require_once("db.php");
+require_once("sodium_funcs.php");
+require_once("render_funcs.php");
 session_start();
 
-$dbhost = "localhost";
-$port = "3306";
-$dbuser = "php-test";
-$dbpass = "password";
-
-$conn = new PDO("mysql:host=$dbhost;port=$port", $dbuser, $dbpass);
-function setup_db($conn)
+function setup_db()
 {
+	$dbhost = "localhost";
+	$port = "3306";
+	$dbuser = "php-test";
+	$dbpass = "password";
+
+	$conn = new PDO("mysql:host=$dbhost;port=$port", $dbuser, $dbpass);
+
 	$q = "CREATE database if not exists php_test";
 	$conn->query($q);
 
@@ -17,7 +21,6 @@ function setup_db($conn)
 	$conn->query($q);
 
 	$q = "set names 'utf8'";
-
 	$conn->query($q);
 
 	$q = "CREATE table if not exists users (uid int(11) auto_increment, name varchar(30), public_key longtext, primary key (uid), unique key (name))";
@@ -28,24 +31,29 @@ function setup_db($conn)
 
 	$q = "CREATE table if not exists friends (name varchar(30), uid int(11))";
 	$conn->query($q);
+
+	return $conn;
 }
 
-setup_db($conn);
+$conn = setup_db();
 
 $name = $_SERVER['REMOTE_ADDR'];
 // $name = "test3";
 $name = str_replace(".", "_", $name);
 
 if (isset($_REQUEST['friend'])) {
-	$_SESSION['friend'] = $_REQUEST['friend'];
 	$friend = $_REQUEST['friend'];
+	$_SESSION['friend'] = $friend;
 }
 
-$does_user_exist = does_user_exist($conn, $name);
-$keypair = create_keypair_if_not_exist($conn, $does_user_exist, $name);
+if (isset($_SESSION['friend'])) {
+	$friend = $_SESSION['friend'];
+}
+
+$keypair = create_keypair_if_not_exist($conn, $name);
 
 use ReallySimpleJWT\Token;
-
+// unset($_SESSION['jwt']);
 try {
 	if (!isset($_SESSION['jwt'])) {
 		throw new Exception('New Token');
@@ -96,143 +104,6 @@ function create_jwt_token($conn, $name)
 }
 
 
-// Database functions 
-function does_user_exist($conn, $name)
-{
-	$q = "SELECT * from users where name = '$name'";
-	$result = $conn->query($q);
-	$result = $result->fetchAll();
-	if (count($result) == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-function is_friend_already_added($conn, $uid, $friend_name)
-{
-	$q = "SELECT * from friends where name = '$friend_name' and uid = $uid";
-	$result = $conn->query($q);
-	$result = $result->fetchAll();
-	if (count($result) == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-function does_friend_exist($conn, $friend_name)
-{
-	$q = "SELECT * from users where name = '$friend_name'";
-	$result = $conn->query($q);
-	$result = $result->fetchAll();
-	if (count($result) == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-
-function get_messages($conn, $friend, $name)
-{
-	$q = "select sender_text, receiver_text, sender from messages where (sender='$name' and receiver='$friend') or (sender='$friend' and receiver='$name')";
-	$messages = $conn->query($q);
-	$messages = $messages->fetchAll();
-	return $messages;
-}
-
-function insert_user($conn, $name, $public_key)
-{
-	$q = "insert into users (name, public_key) values ('$name', '$public_key')";
-	$conn->query($q);
-}
-
-function insert_friend($conn, $uid, $friend_name)
-{
-	$q = "insert into friends (name, uid) values ('$friend_name', $uid)";
-	$conn->query($q);
-}
-
-function insert_message($conn, $sender_text, $receiver_text, $sender, $receiver)
-{
-	$sender_text = sodium_bin2base64($sender_text, 1);
-	$receiver_text = sodium_bin2base64($receiver_text, 1);
-	$q = "insert into messages (sender_text, receiver_text, sender, receiver) values ('$sender_text','$receiver_text', '$sender', '$receiver')";
-	$conn->query($q);
-}
-
-function get_public_key($name, $conn, $bin = true)
-{
-	$result = $conn->query("SELECT public_key from users where name = '$name'");
-	$result = $result->fetch()[0];
-	if ($bin == true) {
-		$result = sodium_base642bin($result, 1);
-	}
-	return $result;
-}
-
-function getUID($conn, $name)
-{
-	$uid = $conn->query("select uid from users where name='$name' order by uid desc");
-	$uid = $uid->fetch();
-	return $uid[0];
-}
-
-
-
-
-// Sodium functions
-function create_keypair()
-{
-	$keypair = sodium_crypto_box_keypair();
-	return $keypair;
-}
-function encrypt_message($message, $public_key)
-{
-	try {
-		$encrypted_message = sodium_crypto_box_seal($message, $public_key);
-	} catch (Exception $e) {
-		print_alert();
-		$encrypted_message = false;
-	}
-	return $encrypted_message;
-}
-
-function decrypt_message($encrypted_message, $keypair)
-{
-	$decrypted = sodium_crypto_box_seal_open(
-		$encrypted_message,
-		$keypair
-	);
-	return $decrypted;
-}
-
-function create_keypair_if_not_exist($conn, $does_user_exist, $name)
-{
-	if (!$does_user_exist) {
-		$keypair = create_keypair();
-		$public_key = sodium_crypto_box_publickey($keypair);
-		$public_key = sodium_bin2base64($public_key, 1);
-
-		setcookie("keypair_" . $name, $keypair, time() + (86400 * 30));
-		insert_user($conn, $name, $public_key);
-		return $keypair;
-	} else {
-		$keypair = $_COOKIE['keypair_' . $name];
-		return $keypair;
-	}
-}
-
-function public_key_into_bin($public_key)
-{
-	$public_key = sodium_base642bin($public_key, 1);
-	return $public_key;
-}
-
-
-
-
 ?>
 <link hred="css/style.css.php" rel="stylesheet" type="text/css">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
@@ -256,21 +127,6 @@ if (isset($_REQUEST['text'])) {
 	send_text($conn, $text, $friend, $name, $payload);
 }
 
-function send_text($conn, $text, $friend, $name, $payload)
-{
-	$public_key_user = public_key_into_bin($payload["public_key"]);
-	$public_key_friend = get_public_key($friend, $conn);
-
-	$encrypted_text_user = encrypt_message($text, $public_key_user);
-	$encrypted_text_friend = encrypt_message($text, $public_key_friend);
-	if ($encrypted_text_user != false and $encrypted_text_friend != false) {
-		insert_message($conn, $encrypted_text_user, $encrypted_text_friend, $name, $friend);
-	}
-
-	$new_url = strip_param_from_url("text");
-	set_url($new_url);
-}
-
 
 function strip_param_from_url($param)
 {
@@ -289,23 +145,6 @@ function set_url($url)
 	echo ("<script>history.replaceState({},'','$url');</script>");
 }
 
-function add_new_friend($conn, $name)
-{
-	$friend_name = $_REQUEST['new_friend'];
-	$uid = getUID($conn, $name);
-
-	$is_friend_added = is_friend_already_added($conn, $uid, $friend_name);
-	$does_friend_exist = does_friend_exist($conn, $friend_name);
-	if ($is_friend_added == false and $does_friend_exist == true) {
-		insert_friend($conn, $uid, $friend_name);
-	} else {
-		print '<div class="alert alert-danger" role="alert"> Friend already added or friend doesn\'t exist</div>';
-	}
-
-	$new_url = strip_param_from_url("new_friend");
-	set_url($new_url);
-}
-
 if (isset($_REQUEST['new_friend'])) {
 	add_new_friend($conn, $name);
 }
@@ -322,64 +161,9 @@ if (isset($_SESSION['friend'])) {
 	print "</table>";
 }
 
-function render_messages($messages, $name, $keypair)
-{
-	if ($messages != null)
-		foreach ($messages as $message) {
-			$sender = $message["sender"];
-			if ($sender == $name) {
-				$text = $message["sender_text"];
-			} else {
-				$text = $message["receiver_text"];
-			}
-			$text = sodium_base642bin($text, 1);
-
-			$text = decrypt_message($text, $keypair);
-			$sender = $message["sender"];
-			if ($sender == $name) {
-				$td = "<tr><td>$text</td><td></td></tr>";
-			} else {
-				$td = "<tr><td></td><td>$text</td></tr>";
-			}
-			print $td;
-		}
-	else {
-		print "<tr><td> No messages </td></tr>";
-	}
-}
-
-function get_friends($conn, $uid)
-{
-	$result = $conn->query("select name, uid from friends where uid=$uid");
-	if (!$result) {
-		return [];
-	}
-	$result = $result->fetchAll();
-	return $result;
-}
 
 if (isset($friend)) {
 	print "<h2>Friend: " . $friend . "</h2>";
-}
-
-function print_friends($conn, $name)
-{
-	$uid = getUID($conn, $name);
-	$friends = get_friends($conn, $uid);
-	print "<table class='table' border=1>
-    <thead><td colspan=2> Your friends </td></thead>";
-	if ($friends) {
-		foreach ($friends as $friend) {
-			$vars = array(
-				'$id' => $friend['uid'],
-				'$friendname' => $friend['name'],
-			);
-			$line = '<tr><td>$id</td><td><a href="index.php?friend=$friendname"> $friendname </a></td></tr>';
-			$line = strtr($line, $vars);
-			print $line;
-		}
-	}
-	print "</table>";
 }
 print_friends($conn, $name);
 
