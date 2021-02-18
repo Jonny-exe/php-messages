@@ -38,7 +38,6 @@ function setup_db()
 $conn = setup_db();
 
 $name = $_SERVER['REMOTE_ADDR'];
-// $name = "test3";
 $name = str_replace(".", "_", $name);
 
 if (isset($_REQUEST['friend'])) {
@@ -122,6 +121,14 @@ function create_jwt_token($conn, $name)
 
 <?php
 
+if (isset($_REQUEST['remove'])) {
+	$friend_to_remove = $_REQUEST['remove'];
+	$uid = getUID($conn, $name);
+	remove_friend($conn, $uid, $friend_to_remove, $name);
+	$new_url = strip_param_from_url("remove");
+	set_url($new_url);
+}
+
 if (isset($_REQUEST['text'])) {
 	$text = $_REQUEST['text'];
 	send_text($conn, $text, $friend, $name, $payload);
@@ -162,10 +169,13 @@ if (isset($_SESSION['friend'])) {
 }
 
 
+
 if (isset($friend)) {
 	print "<h2>Friend: " . $friend . "</h2>";
 }
 print_friends($conn, $name);
+
+
 
 ?>
 

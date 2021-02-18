@@ -6,14 +6,14 @@ function print_friends($conn, $name)
     $uid = getUID($conn, $name);
     $friends = get_friends($conn, $uid);
     print "<table class='table' border=1>
-    <thead><td colspan=2> Your friends </td></thead>";
+    <thead><td colspan=4> Your friends </td></thead>";
     if ($friends) {
         foreach ($friends as $friend) {
             $vars = array(
                 '$id' => $friend['uid'],
                 '$friendname' => $friend['name'],
             );
-            $line = '<tr><td>$id</td><td><a href="index.php?friend=$friendname"> $friendname </a></td></tr>';
+            $line = '<tr><td>$id</td><td><a href="index.php?friend=$friendname"> $friendname </a></td><td><a href="index.php?remove=$friendname" class="btn-close" aria-label="Close"></a></td></tr>';
             $line = strtr($line, $vars);
             print $line;
         }

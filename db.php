@@ -92,3 +92,12 @@ function get_friends($conn, $uid)
     $result = $result->fetchAll();
     return $result;
 }
+
+function remove_friend($conn, $uid, $friend, $name)
+{
+    $q = "delete from friends where uid=$uid and name='$friend'";
+    $conn->query($q);
+
+    $q = "delete from messages where (sender='$name' and receiver='$friend') or (sender='$friend' and receiver='$name')";
+    $conn->query($q);
+}
